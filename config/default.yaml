@@ -1,0 +1,91 @@
+# NexCrawl-M ML configuration
+# Values marked MEASURE must be replaced with real measurements from your rig.
+# The defaults are plausible starting points, not correct values.
+
+rig:
+  mast_height_m: 0.25          # MEASURE: ground to tilt-axis centreline
+  wheel_base_m: 0.30           # MEASURE: left-to-right wheel centre distance
+  wheel_radius_m: 0.05         # MEASURE
+  encoder_ticks_per_rev: 360   # MEASURE: from your encoder datasheet
+  mic_spacing_m: 0.40          # MEASURE: technical proposal specifies 40cm front-bumper baseline for reliable TDoA resolution; must match the physical rig exactly
+
+lidar:
+  port: /dev/ttyUSB0
+  baudrate: 460800
+  min_range_m: 0.15            # below this the bracket occludes the beam
+  max_range_m: 10.0
+  points_per_revolution: 500
+
+servo:
+  port: /dev/ttyACM0
+  baudrate: 921600
+  ticks_per_rev: 4096          # STS3215 12-bit absolute encoder
+  angle_tolerance_deg: 0.3
+  settle_time_s: 0.12
+
+dome_scan:
+  phi_start_deg: -45.0
+  phi_end_deg: 45.0
+  step_deg: 2.5
+  strategy: step_and_stare     # step_and_stare | continuous_nod
+  progressive_updates: true
+  update_every_n_steps: 5
+
+reconstruction:
+  voxel_size_m: 0.025          # ~= C1 native lateral resolution; finer keeps noise
+  sor_neighbors: 25
+  sor_std_ratio: 2.0           # TUNE against real dust/mist conditions
+  normal_radius_m: 0.12
+  normal_max_nn: 30
+  method: bpa                  # bpa preserves rock texture; poisson bridges gaps
+  bpa_radii_m: [0.04, 0.08, 0.16]
+  poisson_depth: 9
+  smoothing_iterations: 2      # keep low - more smooths away rock texture
+  decimate_target_triangles: 60000
+
+change_detection:
+  diff_threshold_m: 0.08       # TUNE: must exceed your measured noise floor
+  dbscan_eps_m: null           # null = auto-suggest from point density
+  dbscan_min_samples: null      # null = auto-suggest via 2*dim heuristic; a fixed constant here previously swallowed a real rockfall as noise (see suggest_min_samples)
+  min_blob_points: 30
+  min_registration_fitness: 0.3
+
+models:
+  structural:
+    path: data/models/structural_model.txt
+    calibrated_path: data/models/structural_model_calibrated.joblib
+    n_estimators: 300
+    num_leaves: 15             # small on purpose - 5 features, few hundred rows
+    max_depth: 5
+    learning_rate: 0.05
+    class_weight: balanced     # staged data is roof_fall-poor
+  gas:
+    path: data/models/gas_model.txt
+    calibrated_path: data/models/gas_model_calibrated.joblib
+    window_seconds: 10.0
+    stride_seconds: 2.0
+    n_estimators: 250
+    num_leaves: 20
+  knocknet:
+    onnx_path: data/models/knocknet.onnx
+    sample_rate: 22050
+    n_mels: 64
+    clip_duration_s: 1.0
+    min_confidence: 0.6
+
+calibration:
+  method: isotonic             # sigmoid if calibration set < 100 samples
+  cv_mode: prefit              # NEVER change to default CV - see calibration_wrapper.py
+  test_size: 0.2
+  calib_size: 0.2
+
+gas_thresholds:
+  ch4_caution_percent: 1.0
+  ch4_withdraw_percent: 1.25
+  co_caution_ppm: 50
+  co_danger_ppm: 100
+  o2_critical_low_percent: 19.5
+
+api:
+  host: 0.0.0.0
+  port: 8000
